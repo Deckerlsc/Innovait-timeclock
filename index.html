@@ -849,9 +849,11 @@ function renderSummary(punches) {
   });
   let empCards = Object.entries(empMap).map(([name, hrs]) =>
     `<div class="stat-card"><div class="stat-label">${name}</div><div class="stat-val">${hrs.toFixed(1)}</div><div class="stat-sub">hours</div></div>`).join('');
+  const activeNow = punches.filter(p => !p.clockOut);
+  const activeNames = activeNow.map(p => p.employeeName).join(', ') || 'none';
   document.getElementById('summary-row').innerHTML = `
     <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-val">${totalHrs.toFixed(1)}</div><div class="stat-sub">${completed.length} punches</div></div>
-    <div class="stat-card"><div class="stat-label">Active Now</div><div class="stat-val">${punches.filter(p=>!p.clockOut).length}</div><div class="stat-sub">clocked in</div></div>
+    <div class="stat-card"><div class="stat-label">Active Now</div><div class="stat-val">${activeNow.length}</div><div class="stat-sub">${activeNames}</div></div>
     ${empCards}`;
 }
 
