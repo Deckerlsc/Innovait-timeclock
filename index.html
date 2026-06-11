@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shop Time Clock</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --bg2: #1a1a1a;
+    --bg3: #242424;
+    --border: #2e2e2e;
+    --border2: #3a3a3a;
+    --text: #f0ede8;
+    --muted: #888;
+    --accent: #e8a020;
+    --accent2: #c4831a;
+    --green: #2dbd6e;
+    --red: #e84040;
+    --blue: #4a9eff;
+    --font-head: 'Barlow Condensed', sans-serif;
+    --font-body: 'Barlow', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); min-height: 100vh; }
+
+  /* NAV */
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 56px; background: var(--bg2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+  .nav-logo { font-family: var(--font-head); font-size: 22px; font-weight: 700; letter-spacing: 1px; color: var(--accent); }
+  .nav-logo span { color: var(--muted); font-weight: 600; }
+  .nav-tabs { display: flex; gap: 4px; }
+  .nav-tab { padding: 6px 16px; border-radius: 6px; border: none; background: transparent; color: var(--muted); font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; letter-spacing: .5px; text-transform: uppercase; transition: all .15s; }
+  .nav-tab:hover { color: var(--text); background: var(--bg3); }
+  .nav-tab.active { color: var(--accent); background: rgba(232,160,32,.1); }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  #clock-display { font-family: var(--font-mono); font-size: 14px; color: var(--muted); }
+
+  /* PAGES */
+  .page { display: none; padding: 32px 24px; max-width: 900px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  /* CLOCK PAGE */
+  .clock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .employee-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: border-color .2s; }
+  .employee-card.clocked-in { border-color: var(--green); }
+  .emp-name { font-family: var(--font-head); font-size: 22px; font-weight: 700; letter-spacing: .5px; margin-bottom: 4px; }
+  .emp-status { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 16px; }
+  .emp-status.in { color: var(--green); }
+  .emp-elapsed { font-family: var(--font-mono); font-size: 28px; font-weight: 500; color: var(--accent); margin-bottom: 16px; min-height: 40px; }
+  .emp-task { font-size: 13px; color: var(--muted); margin-bottom: 16px; min-height: 18px; }
+
+  /* FORMS */
+  .field { margin-bottom: 14px; }
+  label.lbl { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+  select, input[type=text], textarea {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px;
+    color: var(--text); font-family: var(--font-body); font-size: 14px; padding: 10px 12px;
+    outline: none; transition: border-color .15s;
+  }
+  select:focus, input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 64px; }
+  option { background: var(--bg2); }
+
+  /* BUTTONS */
+  .btn { padding: 10px 20px; border-radius: 8px; border: none; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-green { background: var(--green); color: #fff; width: 100%; }
+  .btn-green:hover { filter: brightness(1.1); }
+  .btn-red { background: var(--red); color: #fff; width: 100%; }
+  .btn-red:hover { filter: brightness(1.1); }
+  .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border2); }
+  .btn-outline:hover { border-color: var(--text); color: var(--text); }
+  .btn-accent { background: var(--accent); color: #111; }
+  .btn-accent:hover { background: var(--accent2); }
+
+  /* SIGNATURE PAD */
+  .sig-wrap { border: 1px solid var(--border2); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  canvas.sig-pad { display: block; width: 100%; height: 120px; background: var(--bg3); cursor: crosshair; touch-action: none; }
+  .sig-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+  /* ADMIN TABLE */
+  .admin-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 24px; }
+  .admin-controls .field { margin-bottom: 0; }
+  .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+  .stat-val { font-family: var(--font-mono); font-size: 24px; font-weight: 500; color: var(--accent); }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:hover { background: var(--bg2); }
+  tbody td { padding: 10px 12px; color: var(--text); vertical-align: middle; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .badge-green { background: rgba(45,189,110,.15); color: var(--green); }
+  .badge-red { background: rgba(232,64,64,.12); color: var(--red); }
+  .badge-blue { background: rgba(74,158,255,.12); color: var(--blue); }
+  .edit-btn { background: transparent; border: 1px solid var(--border2); border-radius: 5px; color: var(--muted); padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: var(--font-body); }
+  .edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .del-btn { background: transparent; border: 1px solid transparent; border-radius: 5px; color: var(--muted); padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: var(--font-body); }
+  .del-btn:hover { border-color: var(--red); color: var(--red); }
+
+  /* MODAL */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px; padding: 28px; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-family: var(--font-head); font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+  /* EMPLOYEES ADMIN */
+  .emp-list { display: flex; flex-direction: column; gap: 10px; }
+  .emp-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+  .emp-role { font-size: 12px; color: var(--muted); }
+
+  /* PAGE HEADER */
+  .page-header { margin-bottom: 28px; }
+  .page-header h1 { font-family: var(--font-head); font-size: 32px; font-weight: 700; letter-spacing: .5px; }
+  .page-header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 12px 18px; font-size: 13px; font-weight: 600; display: none; z-index: 300; }
+  #toast.show { display: block; animation: fadeIn .2s; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:none;} }
+
+  .sig-thumb { max-width: 80px; max-height: 36px; border-radius: 4px; cursor: pointer; }
+  .no-data { text-align: center; padding: 48px; color: var(--muted); font-size: 14px; }
+
+  @media (max-width: 600px) {
+    nav { padding: 0 14px; }
+    .page { padding: 20px 14px; }
+    .nav-logo span { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">SHOP<span> CLOCK</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('clock')">Clock</button>
+    <button class="nav-tab" onclick="showPage('admin')">Admin</button>
+    <button class="nav-tab" onclick="showPage('employees')">Employees</button>
+  </div>
+  <div class="nav-right">
+    <span id="clock-display"></span>
+  </div>
+</nav>
+
+<!-- CLOCK PAGE -->
+<div id="page-clock" class="page active">
+  <div class="page-header">
+    <h1>TIME CLOCK</h1>
+    <p>Tap a card to clock in or out</p>
+  </div>
+  <div class="clock-grid" id="clock-grid">
+    <div class="no-data">Loading employees…</div>
+  </div>
+</div>
+
+<!-- ADMIN PAGE -->
+<div id="page-admin" class="page">
+  <div class="page-header">
+    <h1>TIMESHEET</h1>
+    <p>View, edit, and export punch records</p>
+  </div>
+  <div class="admin-controls">
+    <div class="field">
+      <label class="lbl">Employee</label>
+      <select id="filter-emp" onchange="loadPunches()" style="width:160px;">
+        <option value="">All</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="lbl">From</label>
+      <input type="date" id="filter-from" oninput="loadPunches()" style="width:148px; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14px; padding:10px 12px; outline:none;">
+    </div>
+    <div class="field">
+      <label class="lbl">To</label>
+      <input type="date" id="filter-to" oninput="loadPunches()" style="width:148px; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14px; padding:10px 12px; outline:none;">
+    </div>
+    <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+  <div class="summary-row" id="summary-row"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Task</th><th>Notes</th><th>Sig</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="punch-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- EMPLOYEES PAGE -->
+<div id="page-employees" class="page">
+  <div class="page-header">
+    <h1>EMPLOYEES</h1>
+    <p>Manage who can clock in</p>
+  </div>
+  <div style="margin-bottom:20px;">
+    <button class="btn btn-accent" onclick="openAddEmp()">+ Add Employee</button>
+  </div>
+  <div class="emp-list" id="emp-list"></div>
+</div>
+
+<!-- CLOCK IN MODAL -->
+<div class="modal-bg" id="modal-clockin">
+  <div class="modal">
+    <div class="modal-title" id="modal-clockin-title">Clock In</div>
+    <div class="field">
+      <label class="lbl">Task Type</label>
+      <select id="ci-task">
+        <option value="Fabrication">Fabrication</option>
+        <option value="Welding">Welding</option>
+        <option value="Install">Install</option>
+        <option value="Delivery">Delivery</option>
+        <option value="Body Swap">Body Swap</option>
+        <option value="Handrail / Staircase">Handrail / Staircase</option>
+        <option value="Vehicle Mod">Vehicle Mod</option>
+        <option value="Cleanup / Shop">Cleanup / Shop</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="lbl">Job / Work Order (optional)</label>
+      <input type="text" id="ci-job" placeholder="e.g. Kauffman Deck, 365 Camper…">
+    </div>
+    <div class="field">
+      <label class="lbl">Notes (optional)</label>
+      <textarea id="ci-notes" rows="2" placeholder="Any details…"></textarea>
+    </div>
+    <div class="field">
+      <label class="lbl">Signature</label>
+      <div class="sig-wrap"><canvas class="sig-pad" id="sig-canvas-in" width="400" height="120"></canvas></div>
+      <div class="sig-actions">
+        <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;" onclick="clearSig('sig-canvas-in')">Clear</button>
+        <span style="font-size:12px;color:var(--muted);align-self:center;">Sign above</span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-green" onclick="submitClockIn()">Clock In</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-clockin')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- CLOCK OUT MODAL -->
+<div class="modal-bg" id="modal-clockout">
+  <div class="modal">
+    <div class="modal-title" id="modal-clockout-title">Clock Out</div>
+    <div style="margin-bottom:16px;">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">Elapsed time</div>
+      <div id="co-elapsed" style="font-family:var(--font-mono);font-size:32px;color:var(--accent);"></div>
+    </div>
+    <div class="field">
+      <label class="lbl">End Notes (optional)</label>
+      <textarea id="co-notes" rows="2" placeholder="What was completed?"></textarea>
+    </div>
+    <div class="field">
+      <label class="lbl">Clock-out Signature</label>
+      <div class="sig-wrap"><canvas class="sig-pad" id="sig-canvas-out" width="400" height="120"></canvas></div>
+      <div class="sig-actions">
+        <button class="btn btn-outline" style="font-size:12px;padding:5px 12px;" onclick="clearSig('sig-canvas-out')">Clear</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-red" onclick="submitClockOut()">Clock Out</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-clockout')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD EMPLOYEE MODAL -->
+<div class="modal-bg" id="modal-emp">
+  <div class="modal">
+    <div class="modal-title">Add Employee</div>
+    <div class="field">
+      <label class="lbl">Name</label>
+      <input type="text" id="emp-name-in" placeholder="First Last">
+    </div>
+    <div class="field">
+      <label class="lbl">Role</label>
+      <input type="text" id="emp-role-in" placeholder="Welder, Fabricator, Driver…">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-accent" onclick="saveEmployee()">Save</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-emp')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT PUNCH MODAL -->
+<div class="modal-bg" id="modal-edit">
+  <div class="modal">
+    <div class="modal-title">Edit Punch</div>
+    <input type="hidden" id="edit-id">
+    <div class="field">
+      <label class="lbl">Clock In Time</label>
+      <input type="datetime-local" id="edit-in" style="width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14px; padding:10px 12px; outline:none;">
+    </div>
+    <div class="field">
+      <label class="lbl">Clock Out Time</label>
+      <input type="datetime-local" id="edit-out" style="width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14px; padding:10px 12px; outline:none;">
+    </div>
+    <div class="field">
+      <label class="lbl">Task</label>
+      <select id="edit-task">
+        <option>Fabrication</option><option>Welding</option><option>Install</option>
+        <option>Delivery</option><option>Body Swap</option><option>Handrail / Staircase</option>
+        <option>Vehicle Mod</option><option>Cleanup / Shop</option><option>Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="lbl">Job</label>
+      <input type="text" id="edit-job">
+    </div>
+    <div class="field">
+      <label class="lbl">Notes</label>
+      <textarea id="edit-notes" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-accent" onclick="savePunchEdit()">Save Changes</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-edit')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- SIG VIEW MODAL -->
+<div class="modal-bg" id="modal-sig">
+  <div class="modal" style="text-align:center;">
+    <div class="modal-title">Signature</div>
+    <img id="sig-view-img" src="" style="max-width:100%;border-radius:8px;border:1px solid var(--border2);">
+    <div style="margin-top:16px;"><button class="btn btn-outline" onclick="closeModal('modal-sig')">Close</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── FIREBASE CONFIG ───────────────────────────────────────────────────────
+// Replace these values with your own Firebase project config
+const firebaseConfig = {
+  apiKey: "AIzaSyDtx75r8IH0qLt-54K8pZFkS7mWalKU41s",
+  authDomain: "timeclock-4805d.firebaseapp.com",
+  projectId: "timeclock-4805d",
+  storageBucket: "timeclock-4805d.firebasestorage.app",
+  messagingSenderId: "852071028144",
+  appId: "1:852071028144:web:28e548327ce346aa977275"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+// ──────────────────────────────────────────────────────────────────────────
+
+let employees = [];
+let activePunchEmpId = null;
+let activePunchDocId = null;
+let activePunchInTime = null;
+let elapsedInterval = null;
+let punchesCache = [];
+
+// Live clock
+setInterval(() => {
+  document.getElementById('clock-display').textContent =
+    new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}, 1000);
+
+// ─── PAGES ─────────────────────────────────────────────────────────────────
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  event.target.classList.add('active');
+  if (id === 'admin') loadPunches();
+}
+
+// ─── EMPLOYEES ─────────────────────────────────────────────────────────────
+function listenEmployees() {
+  db.collection('employees').orderBy('name').onSnapshot(snap => {
+    employees = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderClockGrid();
+    renderEmpList();
+    populateEmpFilter();
+  });
+}
+
+function renderEmpList() {
+  const el = document.getElementById('emp-list');
+  if (!employees.length) { el.innerHTML = '<div class="no-data">No employees yet. Add one above.</div>'; return; }
+  el.innerHTML = employees.map(e => `
+    <div class="emp-row">
+      <div>
+        <div style="font-weight:600;">${e.name}</div>
+        <div class="emp-role">${e.role || ''}</div>
+      </div>
+      <button class="del-btn" onclick="deleteEmployee('${e.id}','${e.name}')">Remove</button>
+    </div>`).join('');
+}
+
+function populateEmpFilter() {
+  const sel = document.getElementById('filter-emp');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All</option>' +
+    employees.map(e => `<option value="${e.id}" ${e.id===cur?'selected':''}>${e.name}</option>`).join('');
+}
+
+function openAddEmp() { document.getElementById('emp-name-in').value=''; document.getElementById('emp-role-in').value=''; openModal('modal-emp'); }
+async function saveEmployee() {
+  const name = document.getElementById('emp-name-in').value.trim();
+  const role = document.getElementById('emp-role-in').value.trim();
+  if (!name) { toast('Enter a name'); return; }
+  await db.collection('employees').add({ name, role, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+  closeModal('modal-emp');
+  toast('Employee added');
+}
+async function deleteEmployee(id, name) {
+  if (!confirm(`Remove ${name}?`)) return;
+  await db.collection('employees').doc(id).delete();
+  toast('Employee removed');
+}
+
+// ─── CLOCK GRID ────────────────────────────────────────────────────────────
+function renderClockGrid() {
+  const grid = document.getElementById('clock-grid');
+  if (!employees.length) { grid.innerHTML = '<div class="no-data">Add employees on the Employees tab first.</div>'; return; }
+  grid.innerHTML = employees.map(e => `
+    <div class="employee-card" id="card-${e.id}">
+      <div class="emp-name">${e.name}</div>
+      <div class="emp-status" id="status-${e.id}">Clocked Out</div>
+      <div class="emp-elapsed" id="elapsed-${e.id}">—</div>
+      <div class="emp-task" id="task-${e.id}"></div>
+      <button class="btn btn-green" id="btn-${e.id}" onclick="handleClockBtn('${e.id}')">Clock In</button>
+    </div>`).join('');
+  listenActivePunches();
+}
+
+function listenActivePunches() {
+  db.collection('punches').where('clockOut', '==', null).onSnapshot(snap => {
+    // reset all
+    employees.forEach(e => setCardOut(e.id));
+    snap.docs.forEach(d => {
+      const p = d.data();
+      setCardIn(p.employeeId, d.id, p.clockIn?.toDate(), p.task, p.job);
+    });
+  });
+}
+
+function setCardIn(empId, docId, inTime, task, job) {
+  const card = document.getElementById('card-' + empId); if (!card) return;
+  card.classList.add('clocked-in');
+  document.getElementById('status-' + empId).textContent = 'Clocked In';
+  document.getElementById('status-' + empId).className = 'emp-status in';
+  document.getElementById('task-' + empId).textContent = [task, job].filter(Boolean).join(' · ');
+  const btn = document.getElementById('btn-' + empId);
+  btn.textContent = 'Clock Out'; btn.className = 'btn btn-red';
+  startElapsed(empId, inTime);
+}
+
+function setCardOut(empId) {
+  const card = document.getElementById('card-' + empId); if (!card) return;
+  card.classList.remove('clocked-in');
+  document.getElementById('status-' + empId).textContent = 'Clocked Out';
+  document.getElementById('status-' + empId).className = 'emp-status';
+  document.getElementById('elapsed-' + empId).textContent = '—';
+  document.getElementById('task-' + empId).textContent = '';
+  const btn = document.getElementById('btn-' + empId);
+  btn.textContent = 'Clock In'; btn.className = 'btn btn-green';
+}
+
+const elapsedTimers = {};
+function startElapsed(empId, inTime) {
+  if (elapsedTimers[empId]) clearInterval(elapsedTimers[empId]);
+  function tick() {
+    const el = document.getElementById('elapsed-' + empId); if (!el) return;
+    el.textContent = fmtElapsed(Date.now() - inTime.getTime());
+  }
+  tick();
+  elapsedTimers[empId] = setInterval(tick, 1000);
+}
+
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ─── CLOCK IN / OUT ────────────────────────────────────────────────────────
+async function handleClockBtn(empId) {
+  // check if clocked in
+  const snap = await db.collection('punches').where('employeeId','==',empId).where('clockOut','==',null).get();
+  if (snap.empty) {
+    // Clock IN
+    activePunchEmpId = empId;
+    const emp = employees.find(e => e.id === empId);
+    document.getElementById('modal-clockin-title').textContent = `Clock In — ${emp.name}`;
+    document.getElementById('ci-task').value = 'Fabrication';
+    document.getElementById('ci-job').value = '';
+    document.getElementById('ci-notes').value = '';
+    clearSig('sig-canvas-in');
+    openModal('modal-clockin');
+  } else {
+    // Clock OUT
+    const doc = snap.docs[0];
+    activePunchEmpId = empId;
+    activePunchDocId = doc.id;
+    activePunchInTime = doc.data().clockIn?.toDate();
+    const emp = employees.find(e => e.id === empId);
+    document.getElementById('modal-clockout-title').textContent = `Clock Out — ${emp.name}`;
+    document.getElementById('co-notes').value = '';
+    clearSig('sig-canvas-out');
+    // live elapsed in modal
+    if (elapsedInterval) clearInterval(elapsedInterval);
+    function tick() { document.getElementById('co-elapsed').textContent = fmtElapsed(Date.now() - activePunchInTime.getTime()); }
+    tick(); elapsedInterval = setInterval(tick, 1000);
+    openModal('modal-clockout');
+  }
+}
+
+async function submitClockIn() {
+  const task = document.getElementById('ci-task').value;
+  const job = document.getElementById('ci-job').value.trim();
+  const notes = document.getElementById('ci-notes').value.trim();
+  const sigData = getSig('sig-canvas-in');
+  await db.collection('punches').add({
+    employeeId: activePunchEmpId,
+    employeeName: employees.find(e=>e.id===activePunchEmpId)?.name || '',
+    clockIn: firebase.firestore.FieldValue.serverTimestamp(),
+    clockOut: null,
+    task, job, notes,
+    sigIn: sigData,
+    sigOut: null
+  });
+  closeModal('modal-clockin');
+  toast('Clocked in ✓');
+}
+
+async function submitClockOut() {
+  if (elapsedInterval) clearInterval(elapsedInterval);
+  const notes = document.getElementById('co-notes').value.trim();
+  const sigData = getSig('sig-canvas-out');
+  const clockOut = new Date();
+  await db.collection('punches').doc(activePunchDocId).update({
+    clockOut: firebase.firestore.Timestamp.fromDate(clockOut),
+    notesOut: notes,
+    sigOut: sigData
+  });
+  closeModal('modal-clockout');
+  toast('Clocked out ✓');
+}
+
+// ─── SIGNATURE ─────────────────────────────────────────────────────────────
+const sigState = {};
+function initSig(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || sigState[canvasId]) return;
+  const ctx = canvas.getContext('2d');
+  let drawing = false, lx, ly;
+  ctx.strokeStyle = '#e8a020'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / r.width, scaleY = canvas.height / r.height;
+    if (e.touches) return { x: (e.touches[0].clientX - r.left)*scaleX, y: (e.touches[0].clientY - r.top)*scaleY };
+    return { x: (e.clientX - r.left)*scaleX, y: (e.clientY - r.top)*scaleY };
+  }
+  canvas.addEventListener('mousedown', e => { drawing=true; const p=pos(e); lx=p.x; ly=p.y; });
+  canvas.addEventListener('mousemove', e => { if (!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(p.x,p.y); ctx.stroke(); lx=p.x; ly=p.y; });
+  canvas.addEventListener('mouseup', () => drawing=false);
+  canvas.addEventListener('mouseleave', () => drawing=false);
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing=true; const p=pos(e); lx=p.x; ly=p.y; }, {passive:false});
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(p.x,p.y); ctx.stroke(); lx=p.x; ly=p.y; }, {passive:false});
+  canvas.addEventListener('touchend', () => drawing=false);
+  sigState[canvasId] = true;
+}
+function clearSig(id) { const c=document.getElementById(id); if(c){c.getContext('2d').clearRect(0,0,c.width,c.height); sigState[id]=false; initSig(id);} }
+function getSig(id) { const c=document.getElementById(id); return c ? c.toDataURL('image/png') : null; }
+
+// ─── ADMIN / PUNCHES ───────────────────────────────────────────────────────
+async function loadPunches() {
+  const empFilter = document.getElementById('filter-emp').value;
+  const from = document.getElementById('filter-from').value;
+  const to = document.getElementById('filter-to').value;
+
+  let q = db.collection('punches').orderBy('clockIn', 'desc');
+  if (empFilter) q = q.where('employeeId', '==', empFilter);
+  const snap = await q.get();
+  let punches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  if (from) { const f = new Date(from); punches = punches.filter(p => p.clockIn?.toDate() >= f); }
+  if (to) { const t = new Date(to); t.setHours(23,59,59); punches = punches.filter(p => p.clockIn?.toDate() <= t); }
+
+  punchesCache = punches;
+  renderSummary(punches);
+  renderPunchTable(punches);
+}
+
+function renderSummary(punches) {
+  const completed = punches.filter(p => p.clockOut);
+  const totalMs = completed.reduce((acc, p) => acc + (p.clockOut.toDate() - p.clockIn.toDate()), 0);
+  const totalHrs = totalMs / 3600000;
+
+  // per-employee
+  const empMap = {};
+  completed.forEach(p => {
+    if (!empMap[p.employeeName]) empMap[p.employeeName] = 0;
+    empMap[p.employeeName] += (p.clockOut.toDate() - p.clockIn.toDate()) / 3600000;
+  });
+
+  let empCards = Object.entries(empMap).map(([name, hrs]) =>
+    `<div class="stat-card"><div class="stat-label">${name}</div><div class="stat-val">${hrs.toFixed(1)}</div><div class="stat-sub">hours</div></div>`).join('');
+
+  document.getElementById('summary-row').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-val">${totalHrs.toFixed(1)}</div><div class="stat-sub">${completed.length} punches</div></div>
+    <div class="stat-card"><div class="stat-label">Active Now</div><div class="stat-val">${punches.filter(p=>!p.clockOut).length}</div><div class="stat-sub">clocked in</div></div>
+    ${empCards}`;
+}
+
+function renderPunchTable(punches) {
+  const tbody = document.getElementById('punch-tbody');
+  if (!punches.length) { tbody.innerHTML = '<tr><td colspan="9" class="no-data">No punches found</td></tr>'; return; }
+  tbody.innerHTML = punches.map(p => {
+    const inDate = p.clockIn?.toDate();
+    const outDate = p.clockOut?.toDate();
+    const dur = outDate && inDate ? fmtDuration(outDate - inDate) : '<span style="color:var(--green);font-weight:600;">ACTIVE</span>';
+    const dateStr = inDate ? inDate.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '—';
+    const inStr = inDate ? inDate.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const outStr = outDate ? outDate.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const notes = [p.notes, p.notesOut].filter(Boolean).join(' / ');
+    const sigCell = (p.sigOut && !isBlankSig(p.sigOut))
+      ? `<img src="${p.sigOut}" class="sig-thumb" onclick="viewSig('${p.id}')" title="View signature">`
+      : (p.sigIn && !isBlankSig(p.sigIn))
+        ? `<img src="${p.sigIn}" class="sig-thumb" onclick="viewSig('${p.id}','in')" title="View signature">`
+        : '—';
+    return `<tr>
+      <td><strong>${p.employeeName}</strong></td>
+      <td style="white-space:nowrap;">${dateStr}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;">${inStr}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;">${outStr}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;">${dur}</td>
+      <td><span class="badge badge-blue">${p.task||''}</span>${p.job?`<div style="font-size:11px;color:var(--muted);margin-top:3px;">${p.job}</div>`:''}</td>
+      <td style="max-width:160px;font-size:12px;color:var(--muted);">${notes||'—'}</td>
+      <td>${sigCell}</td>
+      <td style="white-space:nowrap;">
+        <button class="edit-btn" onclick="openEditPunch('${p.id}')">Edit</button>
+        <button class="del-btn" onclick="deletePunch('${p.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function isBlankSig(dataUrl) {
+  // quick check: if canvas was never drawn, it's transparent/blank
+  if (!dataUrl || dataUrl.length < 2000) return true;
+  return false;
+}
+
+function fmtDuration(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+
+// ─── EDIT PUNCH ────────────────────────────────────────────────────────────
+function toLocalDTInput(date) {
+  if (!date) return '';
+  const d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
+  return d.toISOString().slice(0,16);
+}
+
+function openEditPunch(id) {
+  const p = punchesCache.find(x => x.id === id); if (!p) return;
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-in').value = p.clockIn ? toLocalDTInput(p.clockIn.toDate()) : '';
+  document.getElementById('edit-out').value = p.clockOut ? toLocalDTInput(p.clockOut.toDate()) : '';
+  document.getElementById('edit-task').value = p.task || 'Other';
+  document.getElementById('edit-job').value = p.job || '';
+  document.getElementById('edit-notes').value = [p.notes, p.notesOut].filter(Boolean).join('\n');
+  openModal('modal-edit');
+}
+
+async function savePunchEdit() {
+  const id = document.getElementById('edit-id').value;
+  const inVal = document.getElementById('edit-in').value;
+  const outVal = document.getElementById('edit-out').value;
+  const updates = {
+    task: document.getElementById('edit-task').value,
+    job: document.getElementById('edit-job').value.trim(),
+    notes: document.getElementById('edit-notes').value.trim(),
+  };
+  if (inVal) updates.clockIn = firebase.firestore.Timestamp.fromDate(new Date(inVal));
+  if (outVal) updates.clockOut = firebase.firestore.Timestamp.fromDate(new Date(outVal));
+  await db.collection('punches').doc(id).update(updates);
+  closeModal('modal-edit');
+  toast('Punch updated ✓');
+  loadPunches();
+}
+
+async function deletePunch(id) {
+  if (!confirm('Delete this punch record?')) return;
+  await db.collection('punches').doc(id).delete();
+  toast('Deleted');
+  loadPunches();
+}
+
+// ─── SIG VIEW ──────────────────────────────────────────────────────────────
+function viewSig(id, which) {
+  const p = punchesCache.find(x => x.id === id); if (!p) return;
+  const src = which === 'in' ? p.sigIn : (p.sigOut || p.sigIn);
+  document.getElementById('sig-view-img').src = src;
+  openModal('modal-sig');
+}
+
+// ─── CSV EXPORT ────────────────────────────────────────────────────────────
+function exportCSV() {
+  if (!punchesCache.length) { toast('No data to export'); return; }
+  const rows = [['Employee','Date','Clock In','Clock Out','Duration (hrs)','Task','Job','Notes']];
+  punchesCache.forEach(p => {
+    const inDate = p.clockIn?.toDate();
+    const outDate = p.clockOut?.toDate();
+    const dur = outDate && inDate ? ((outDate - inDate)/3600000).toFixed(2) : '';
+    rows.push([
+      p.employeeName,
+      inDate ? inDate.toLocaleDateString() : '',
+      inDate ? inDate.toLocaleTimeString() : '',
+      outDate ? outDate.toLocaleTimeString() : '',
+      dur,
+      p.task || '',
+      p.job || '',
+      [p.notes, p.notesOut].filter(Boolean).join(' / ')
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = `timeclock-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('CSV exported ✓');
+}
+
+// ─── MODAL HELPERS ─────────────────────────────────────────────────────────
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  setTimeout(() => {
+    if (id==='modal-clockin') { initSig('sig-canvas-in'); }
+    if (id==='modal-clockout') { initSig('sig-canvas-out'); }
+  }, 50);
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); if(elapsedInterval&&id==='modal-clockout'){clearInterval(elapsedInterval);} }
+
+// close modal on bg click
+document.querySelectorAll('.modal-bg').forEach(bg => {
+  bg.addEventListener('click', e => { if (e.target === bg) closeModal(bg.id); });
+});
+
+// ─── TOAST ─────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+// Set default date range to current week
+function setDefaultDates() {
+  const today = new Date();
+  const day = today.getDay();
+  const monday = new Date(today); monday.setDate(today.getDate() - (day===0?6:day-1));
+  document.getElementById('filter-from').value = monday.toISOString().slice(0,10);
+  document.getElementById('filter-to').value = today.toISOString().slice(0,10);
+}
+setDefaultDates();
+listenEmployees();
+</script>
+</body>
+</html>
