@@ -830,8 +830,8 @@ async function loadPunches() {
   const snap = await q.get();
   let punches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  if (from) { const f = new Date(from); punches = punches.filter(p => p.clockIn?.toDate() >= f); }
-  if (to) { const t = new Date(to); t.setHours(23,59,59); punches = punches.filter(p => p.clockIn?.toDate() <= t); }
+  if (from) { const f = new Date(from + 'T00:00:00'); punches = punches.filter(p => p.clockIn?.toDate() >= f); }
+  if (to) { const t = new Date(to + 'T23:59:59'); punches = punches.filter(p => p.clockIn?.toDate() <= t); }
 
   punchesCache = punches;
   renderSummary(punches);
