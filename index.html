@@ -233,6 +233,7 @@
       <input type="date" id="filter-to" oninput="loadPunches()" style="width:148px; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14px; padding:10px 12px; outline:none;">
     </div>
     <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
+    <button class="btn btn-accent" onclick="openAddPunch()">+ Add Punch</button>
   </div>
   <div class="summary-row" id="summary-row"></div>
   <div class="table-wrap">
@@ -373,6 +374,45 @@
     <div class="modal-actions">
       <button class="btn btn-accent" onclick="saveEmployee()">Save</button>
       <button class="btn btn-outline" onclick="closeModal('modal-emp')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD PUNCH MODAL -->
+<div class="modal-bg" id="modal-add-punch">
+  <div class="modal">
+    <div class="modal-title">Add Punch</div>
+    <div class="field">
+      <label class="lbl">Employee</label>
+      <select id="ap-employee"></select>
+    </div>
+    <div class="field">
+      <label class="lbl">Clock In Time</label>
+      <input type="datetime-local" id="ap-in" style="width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14px; padding:10px 12px; outline:none;">
+    </div>
+    <div class="field">
+      <label class="lbl">Clock Out Time</label>
+      <input type="datetime-local" id="ap-out" style="width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14px; padding:10px 12px; outline:none;">
+    </div>
+    <div class="field">
+      <label class="lbl">Task</label>
+      <select id="ap-task">
+        <option>Fabrication</option><option>Welding</option><option>Install</option>
+        <option>Delivery</option><option>Body Swap</option><option>Handrail / Staircase</option>
+        <option>Vehicle Mod</option><option>Cleanup / Shop</option><option>Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="lbl">Job / Work Order (optional)</label>
+      <input type="text" id="ap-job" placeholder="e.g. Kauffman Deck, 365 Camper…">
+    </div>
+    <div class="field">
+      <label class="lbl">Notes (optional)</label>
+      <textarea id="ap-notes" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-accent" onclick="saveAddPunch()">Save Punch</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-add-punch')">Cancel</button>
     </div>
   </div>
 </div>
@@ -860,6 +900,53 @@ function fmtDuration(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   return `${h}h ${m}m`;
+}
+
+// ─── ADD PUNCH ─────────────────────────────────────────────────────────────
+function openAddPunch() {
+  const sel = document.getElementById('ap-employee');
+  sel.innerHTML = employees.map(e => `<option value="${e.id}" data-name="${e.name}">${e.name}</option>`).join('');
+  document.getElementById('ap-in').value = '';
+  document.getElementById('ap-out').value = '';
+  document.getElementById('ap-task').value = 'Fabrication';
+  document.getElementById('ap-job').value = '';
+  document.getElementById('ap-notes').value = '';
+  openModal('modal-add-punch');
+}
+
+async function saveAddPunch() {
+  const sel = document.getElementById('ap-employee');
+  const empId = sel.value;
+  const empName = sel.options[sel.selectedIndex].dataset.name;
+  const inVal = document.getElementById('ap-in').value;
+  const outVal = document.getElementById('ap-out').value;
+  const task = document.getElementById('ap-task').value;
+  const job = document.getElementById('ap-job').value.trim();
+  const notes = document.getElementById('ap-notes').value.trim();
+
+  if (!inVal) { toast('Clock in time is required'); return; }
+
+  const punch = {
+    employeeId: empId,
+    employeeName: empName,
+    clockIn: firebase.firestore.Timestamp.fromDate(new Date(inVal)),
+    clockOut: outVal ? firebase.firestore.Timestamp.fromDate(new Date(outVal)) : null,
+    task, job, notes,
+    sigIn: null, sigOut: null,
+    editHistory: [{
+      editedBy: currentUserProfile?.name || currentUser?.email || 'Unknown',
+      editedByUid: currentUser?.uid || '',
+      editedAt: new Date().toISOString(),
+      before: {},
+      after: { clockIn: inVal, clockOut: outVal, task, job, notes },
+      note: 'Manual entry'
+    }]
+  };
+
+  await db.collection('punches').add(punch);
+  closeModal('modal-add-punch');
+  toast('Punch added ✓');
+  loadPunches();
 }
 
 // ─── EDIT PUNCH ────────────────────────────────────────────────────────────
