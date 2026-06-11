@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root {
     --bg: #0f0f0f;
@@ -28,6 +29,15 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: var(--font-body); min-height: 100vh; }
 
+  /* LOGIN */
+  #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+  .login-box { background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; padding: 40px 36px; width: 100%; max-width: 380px; }
+  .login-logo { font-family: var(--font-head); font-size: 28px; font-weight: 700; color: var(--accent); letter-spacing: 1px; margin-bottom: 6px; }
+  .login-logo span { color: var(--muted); font-weight: 600; }
+  .login-sub { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+  .login-err { background: rgba(232,64,64,.12); border: 1px solid rgba(232,64,64,.3); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--red); margin-bottom: 16px; display: none; }
+  .login-err.show { display: block; }
+
   /* NAV */
   nav { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 56px; background: var(--bg2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
   .nav-logo { font-family: var(--font-head); font-size: 22px; font-weight: 700; letter-spacing: 1px; color: var(--accent); }
@@ -38,8 +48,12 @@
   .nav-tab.active { color: var(--accent); background: rgba(232,160,32,.1); }
   .nav-right { display: flex; align-items: center; gap: 12px; }
   #clock-display { font-family: var(--font-mono); font-size: 14px; color: var(--muted); }
+  #nav-user { font-size: 12px; color: var(--muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-signout { background: transparent; border: 1px solid var(--border2); border-radius: 6px; color: var(--muted); font-family: var(--font-body); font-size: 12px; font-weight: 600; padding: 4px 10px; cursor: pointer; transition: all .15s; }
+  .btn-signout:hover { border-color: var(--red); color: var(--red); }
 
   /* PAGES */
+  #app { display: none; }
   .page { display: none; padding: 32px 24px; max-width: 900px; margin: 0 auto; }
   .page.active { display: block; }
 
@@ -56,12 +70,12 @@
   /* FORMS */
   .field { margin-bottom: 14px; }
   label.lbl { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
-  select, input[type=text], textarea {
+  select, input[type=text], input[type=email], input[type=password], textarea {
     width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px;
     color: var(--text); font-family: var(--font-body); font-size: 14px; padding: 10px 12px;
     outline: none; transition: border-color .15s;
   }
-  select:focus, input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+  select:focus, input[type=text]:focus, input[type=email]:focus, input[type=password]:focus, textarea:focus { border-color: var(--accent); }
   textarea { resize: vertical; min-height: 64px; }
   option { background: var(--bg2); }
 
@@ -75,6 +89,7 @@
   .btn-outline:hover { border-color: var(--text); color: var(--text); }
   .btn-accent { background: var(--accent); color: #111; }
   .btn-accent:hover { background: var(--accent2); }
+  .btn-full { width: 100%; }
 
   /* SIGNATURE PAD */
   .sig-wrap { border: 1px solid var(--border2); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
@@ -100,10 +115,13 @@
   .badge-green { background: rgba(45,189,110,.15); color: var(--green); }
   .badge-red { background: rgba(232,64,64,.12); color: var(--red); }
   .badge-blue { background: rgba(74,158,255,.12); color: var(--blue); }
+  .badge-muted { background: rgba(136,136,136,.15); color: var(--muted); }
   .edit-btn { background: transparent; border: 1px solid var(--border2); border-radius: 5px; color: var(--muted); padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: var(--font-body); }
   .edit-btn:hover { border-color: var(--accent); color: var(--accent); }
   .del-btn { background: transparent; border: 1px solid transparent; border-radius: 5px; color: var(--muted); padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: var(--font-body); }
   .del-btn:hover { border-color: var(--red); color: var(--red); }
+  .hist-btn { background: transparent; border: 1px solid var(--border2); border-radius: 5px; color: var(--muted); padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: var(--font-body); }
+  .hist-btn:hover { border-color: var(--blue); color: var(--blue); }
 
   /* MODAL */
   .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200; align-items: center; justify-content: center; }
@@ -112,10 +130,18 @@
   .modal-title { font-family: var(--font-head); font-size: 22px; font-weight: 700; margin-bottom: 20px; }
   .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
 
+  /* AUDIT HISTORY */
+  .audit-entry { background: var(--bg3); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; font-size: 12px; }
+  .audit-who { font-weight: 600; color: var(--accent); }
+  .audit-when { color: var(--muted); margin-left: 8px; }
+  .audit-change { margin-top: 6px; color: var(--muted); }
+  .audit-change span { color: var(--text); }
+
   /* EMPLOYEES ADMIN */
   .emp-list { display: flex; flex-direction: column; gap: 10px; }
   .emp-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
   .emp-role { font-size: 12px; color: var(--muted); }
+  .emp-email { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
 
   /* PAGE HEADER */
   .page-header { margin-bottom: 28px; }
@@ -134,20 +160,43 @@
     nav { padding: 0 14px; }
     .page { padding: 20px 14px; }
     .nav-logo span { display: none; }
+    #nav-user { display: none; }
   }
 </style>
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">SHOP<span> CLOCK</span></div>
+    <div class="login-sub">Sign in to continue</div>
+    <div class="login-err" id="login-err"></div>
+    <div class="field">
+      <label class="lbl">Email</label>
+      <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label class="lbl">Password</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-accent btn-full" onclick="doLogin()" style="margin-top:8px;">Sign In</button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
 <nav>
   <div class="nav-logo">SHOP<span> CLOCK</span></div>
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showPage('clock')">Clock</button>
-    <button class="nav-tab" onclick="showPage('admin')">Admin</button>
-    <button class="nav-tab" onclick="showPage('employees')">Employees</button>
+    <button class="nav-tab active" id="tab-clock" onclick="showPage('clock')">Clock</button>
+    <button class="nav-tab" id="tab-admin" onclick="showPage('admin')" style="display:none;">Admin</button>
+    <button class="nav-tab" id="tab-employees" onclick="showPage('employees')" style="display:none;">Employees</button>
   </div>
   <div class="nav-right">
     <span id="clock-display"></span>
+    <span id="nav-user"></span>
+    <button class="btn-signout" onclick="doSignOut()">Sign out</button>
   </div>
 </nav>
 
@@ -202,13 +251,14 @@
 <div id="page-employees" class="page">
   <div class="page-header">
     <h1>EMPLOYEES</h1>
-    <p>Manage who can clock in</p>
+    <p>Manage employees and their login accounts</p>
   </div>
   <div style="margin-bottom:20px;">
     <button class="btn btn-accent" onclick="openAddEmp()">+ Add Employee</button>
   </div>
   <div class="emp-list" id="emp-list"></div>
 </div>
+</div><!-- /app -->
 
 <!-- CLOCK IN MODAL -->
 <div class="modal-bg" id="modal-clockin">
@@ -289,6 +339,21 @@
       <label class="lbl">Role</label>
       <input type="text" id="emp-role-in" placeholder="Welder, Fabricator, Driver…">
     </div>
+    <div class="field">
+      <label class="lbl">Email (for login)</label>
+      <input type="email" id="emp-email-in" placeholder="employee@example.com">
+    </div>
+    <div class="field">
+      <label class="lbl">Password</label>
+      <input type="password" id="emp-pass-in" placeholder="Min 6 characters">
+    </div>
+    <div class="field">
+      <label class="lbl">Account Type</label>
+      <select id="emp-role-type">
+        <option value="employee">Employee</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-accent" onclick="saveEmployee()">Save</button>
       <button class="btn btn-outline" onclick="closeModal('modal-emp')">Cancel</button>
@@ -332,6 +397,15 @@
   </div>
 </div>
 
+<!-- AUDIT HISTORY MODAL -->
+<div class="modal-bg" id="modal-history">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Edit History</div>
+    <div id="history-content"></div>
+    <div style="margin-top:16px;"><button class="btn btn-outline" onclick="closeModal('modal-history')">Close</button></div>
+  </div>
+</div>
+
 <!-- SIG VIEW MODAL -->
 <div class="modal-bg" id="modal-sig">
   <div class="modal" style="text-align:center;">
@@ -345,7 +419,6 @@
 
 <script>
 // ─── FIREBASE CONFIG ───────────────────────────────────────────────────────
-// Replace these values with your own Firebase project config
 const firebaseConfig = {
   apiKey: "AIzaSyDtx75r8IH0qLt-54K8pZFkS7mWalKU41s",
   authDomain: "timeclock-4805d.firebaseapp.com",
@@ -356,8 +429,11 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 // ──────────────────────────────────────────────────────────────────────────
 
+let currentUser = null;
+let currentUserProfile = null;
 let employees = [];
 let activePunchEmpId = null;
 let activePunchDocId = null;
@@ -371,12 +447,69 @@ setInterval(() => {
     new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }, 1000);
 
+// ─── AUTH ──────────────────────────────────────────────────────────────────
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+auth.onAuthStateChanged(async user => {
+  if (user) {
+    currentUser = user;
+    const profileSnap = await db.collection('users').doc(user.uid).get();
+    currentUserProfile = profileSnap.exists ? profileSnap.data() : { role: 'employee', name: user.email };
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('nav-user').textContent = currentUserProfile.name || user.email;
+    applyRoleUI();
+    setDefaultDates();
+    listenEmployees();
+  } else {
+    currentUser = null;
+    currentUserProfile = null;
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+
+function applyRoleUI() {
+  const isAdmin = currentUserProfile?.role === 'admin';
+  document.getElementById('tab-admin').style.display = isAdmin ? '' : 'none';
+  document.getElementById('tab-employees').style.display = isAdmin ? '' : 'none';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-err');
+  errEl.classList.remove('show');
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch (e) {
+    errEl.textContent = friendlyAuthError(e.code);
+    errEl.classList.add('show');
+  }
+}
+
+async function doSignOut() {
+  await auth.signOut();
+}
+
+document.getElementById('login-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function friendlyAuthError(code) {
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Incorrect email or password.';
+  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again later.';
+  if (code === 'auth/invalid-email') return 'Invalid email address.';
+  return 'Sign in failed. Please try again.';
+}
+
 // ─── PAGES ─────────────────────────────────────────────────────────────────
 function showPage(id) {
+  if ((id === 'admin' || id === 'employees') && currentUserProfile?.role !== 'admin') return;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
-  event.target.classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
   if (id === 'admin') loadPunches();
 }
 
@@ -396,8 +529,9 @@ function renderEmpList() {
   el.innerHTML = employees.map(e => `
     <div class="emp-row">
       <div>
-        <div style="font-weight:600;">${e.name}</div>
+        <div style="font-weight:600;">${e.name} <span class="badge ${e.accountRole==='admin'?'badge-red':'badge-muted'}" style="font-size:10px;">${e.accountRole||'employee'}</span></div>
         <div class="emp-role">${e.role || ''}</div>
+        <div class="emp-email">${e.email || ''}</div>
       </div>
       <button class="del-btn" onclick="deleteEmployee('${e.id}','${e.name}')">Remove</button>
     </div>`).join('');
@@ -410,17 +544,47 @@ function populateEmpFilter() {
     employees.map(e => `<option value="${e.id}" ${e.id===cur?'selected':''}>${e.name}</option>`).join('');
 }
 
-function openAddEmp() { document.getElementById('emp-name-in').value=''; document.getElementById('emp-role-in').value=''; openModal('modal-emp'); }
+function openAddEmp() {
+  document.getElementById('emp-name-in').value = '';
+  document.getElementById('emp-role-in').value = '';
+  document.getElementById('emp-email-in').value = '';
+  document.getElementById('emp-pass-in').value = '';
+  document.getElementById('emp-role-type').value = 'employee';
+  openModal('modal-emp');
+}
+
 async function saveEmployee() {
   const name = document.getElementById('emp-name-in').value.trim();
   const role = document.getElementById('emp-role-in').value.trim();
+  const email = document.getElementById('emp-email-in').value.trim();
+  const pass = document.getElementById('emp-pass-in').value;
+  const accountRole = document.getElementById('emp-role-type').value;
   if (!name) { toast('Enter a name'); return; }
-  await db.collection('employees').add({ name, role, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-  closeModal('modal-emp');
-  toast('Employee added');
+  if (!email) { toast('Enter an email'); return; }
+  if (!pass || pass.length < 6) { toast('Password must be at least 6 characters'); return; }
+
+  try {
+    // Create Firebase Auth user via a secondary app instance so we don't lose current session
+    const secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary_' + Date.now());
+    const secondaryAuth = secondaryApp.auth();
+    const cred = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
+    const uid = cred.user.uid;
+    await secondaryApp.delete();
+
+    // Save employee record
+    await db.collection('employees').add({ name, role, email, accountRole, uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    // Save user profile
+    await db.collection('users').doc(uid).set({ name, email, role: accountRole });
+
+    closeModal('modal-emp');
+    toast('Employee added');
+  } catch (e) {
+    toast(e.message || 'Failed to create account');
+  }
 }
+
 async function deleteEmployee(id, name) {
-  if (!confirm(`Remove ${name}?`)) return;
+  if (!confirm(`Remove ${name}? This only removes their employee record. Their login account remains in Firebase Auth.`)) return;
   await db.collection('employees').doc(id).delete();
   toast('Employee removed');
 }
@@ -442,7 +606,6 @@ function renderClockGrid() {
 
 function listenActivePunches() {
   db.collection('punches').where('clockOut', '==', null).onSnapshot(snap => {
-    // reset all
     employees.forEach(e => setCardOut(e.id));
     snap.docs.forEach(d => {
       const p = d.data();
@@ -492,10 +655,8 @@ function fmtElapsed(ms) {
 
 // ─── CLOCK IN / OUT ────────────────────────────────────────────────────────
 async function handleClockBtn(empId) {
-  // check if clocked in
   const snap = await db.collection('punches').where('employeeId','==',empId).where('clockOut','==',null).get();
   if (snap.empty) {
-    // Clock IN
     activePunchEmpId = empId;
     const emp = employees.find(e => e.id === empId);
     document.getElementById('modal-clockin-title').textContent = `Clock In — ${emp.name}`;
@@ -505,7 +666,6 @@ async function handleClockBtn(empId) {
     clearSig('sig-canvas-in');
     openModal('modal-clockin');
   } else {
-    // Clock OUT
     const doc = snap.docs[0];
     activePunchEmpId = empId;
     activePunchDocId = doc.id;
@@ -514,7 +674,6 @@ async function handleClockBtn(empId) {
     document.getElementById('modal-clockout-title').textContent = `Clock Out — ${emp.name}`;
     document.getElementById('co-notes').value = '';
     clearSig('sig-canvas-out');
-    // live elapsed in modal
     if (elapsedInterval) clearInterval(elapsedInterval);
     function tick() { document.getElementById('co-elapsed').textContent = fmtElapsed(Date.now() - activePunchInTime.getTime()); }
     tick(); elapsedInterval = setInterval(tick, 1000);
@@ -534,7 +693,8 @@ async function submitClockIn() {
     clockOut: null,
     task, job, notes,
     sigIn: sigData,
-    sigOut: null
+    sigOut: null,
+    editHistory: []
   });
   closeModal('modal-clockin');
   toast('Clocked in ✓');
@@ -603,17 +763,13 @@ function renderSummary(punches) {
   const completed = punches.filter(p => p.clockOut);
   const totalMs = completed.reduce((acc, p) => acc + (p.clockOut.toDate() - p.clockIn.toDate()), 0);
   const totalHrs = totalMs / 3600000;
-
-  // per-employee
   const empMap = {};
   completed.forEach(p => {
     if (!empMap[p.employeeName]) empMap[p.employeeName] = 0;
     empMap[p.employeeName] += (p.clockOut.toDate() - p.clockIn.toDate()) / 3600000;
   });
-
   let empCards = Object.entries(empMap).map(([name, hrs]) =>
     `<div class="stat-card"><div class="stat-label">${name}</div><div class="stat-val">${hrs.toFixed(1)}</div><div class="stat-sub">hours</div></div>`).join('');
-
   document.getElementById('summary-row').innerHTML = `
     <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-val">${totalHrs.toFixed(1)}</div><div class="stat-sub">${completed.length} punches</div></div>
     <div class="stat-card"><div class="stat-label">Active Now</div><div class="stat-val">${punches.filter(p=>!p.clockOut).length}</div><div class="stat-sub">clocked in</div></div>
@@ -623,6 +779,7 @@ function renderSummary(punches) {
 function renderPunchTable(punches) {
   const tbody = document.getElementById('punch-tbody');
   if (!punches.length) { tbody.innerHTML = '<tr><td colspan="9" class="no-data">No punches found</td></tr>'; return; }
+  const isAdmin = currentUserProfile?.role === 'admin';
   tbody.innerHTML = punches.map(p => {
     const inDate = p.clockIn?.toDate();
     const outDate = p.clockOut?.toDate();
@@ -636,6 +793,11 @@ function renderPunchTable(punches) {
       : (p.sigIn && !isBlankSig(p.sigIn))
         ? `<img src="${p.sigIn}" class="sig-thumb" onclick="viewSig('${p.id}','in')" title="View signature">`
         : '—';
+    const histCount = p.editHistory?.length || 0;
+    const histBtn = isAdmin && histCount > 0
+      ? `<button class="hist-btn" onclick="viewHistory('${p.id}')">History (${histCount})</button>`
+      : '';
+    const editDel = `<button class="edit-btn" onclick="openEditPunch('${p.id}')">Edit</button>${isAdmin ? `<button class="del-btn" onclick="deletePunch('${p.id}')">✕</button>` : ''}`;
     return `<tr>
       <td><strong>${p.employeeName}</strong></td>
       <td style="white-space:nowrap;">${dateStr}</td>
@@ -645,16 +807,12 @@ function renderPunchTable(punches) {
       <td><span class="badge badge-blue">${p.task||''}</span>${p.job?`<div style="font-size:11px;color:var(--muted);margin-top:3px;">${p.job}</div>`:''}</td>
       <td style="max-width:160px;font-size:12px;color:var(--muted);">${notes||'—'}</td>
       <td>${sigCell}</td>
-      <td style="white-space:nowrap;">
-        <button class="edit-btn" onclick="openEditPunch('${p.id}')">Edit</button>
-        <button class="del-btn" onclick="deletePunch('${p.id}')">✕</button>
-      </td>
+      <td style="white-space:nowrap;">${editDel} ${histBtn}</td>
     </tr>`;
   }).join('');
 }
 
 function isBlankSig(dataUrl) {
-  // quick check: if canvas was never drawn, it's transparent/blank
   if (!dataUrl || dataUrl.length < 2000) return true;
   return false;
 }
@@ -685,8 +843,10 @@ function openEditPunch(id) {
 
 async function savePunchEdit() {
   const id = document.getElementById('edit-id').value;
+  const p = punchesCache.find(x => x.id === id); if (!p) return;
   const inVal = document.getElementById('edit-in').value;
   const outVal = document.getElementById('edit-out').value;
+
   const updates = {
     task: document.getElementById('edit-task').value,
     job: document.getElementById('edit-job').value.trim(),
@@ -694,6 +854,32 @@ async function savePunchEdit() {
   };
   if (inVal) updates.clockIn = firebase.firestore.Timestamp.fromDate(new Date(inVal));
   if (outVal) updates.clockOut = firebase.firestore.Timestamp.fromDate(new Date(outVal));
+
+  // Build audit entry with before/after
+  const before = {
+    clockIn: p.clockIn ? toLocalDTInput(p.clockIn.toDate()) : '',
+    clockOut: p.clockOut ? toLocalDTInput(p.clockOut.toDate()) : '',
+    task: p.task || '',
+    job: p.job || '',
+    notes: [p.notes, p.notesOut].filter(Boolean).join(' / '),
+  };
+  const after = {
+    clockIn: inVal || before.clockIn,
+    clockOut: outVal || before.clockOut,
+    task: updates.task,
+    job: updates.job,
+    notes: updates.notes,
+  };
+  const auditEntry = {
+    editedBy: currentUserProfile?.name || currentUser?.email || 'Unknown',
+    editedByUid: currentUser?.uid || '',
+    editedAt: new Date().toISOString(),
+    before,
+    after,
+  };
+
+  updates.editHistory = firebase.firestore.FieldValue.arrayUnion(auditEntry);
+
   await db.collection('punches').doc(id).update(updates);
   closeModal('modal-edit');
   toast('Punch updated ✓');
@@ -707,6 +893,30 @@ async function deletePunch(id) {
   loadPunches();
 }
 
+// ─── AUDIT HISTORY ─────────────────────────────────────────────────────────
+function viewHistory(id) {
+  const p = punchesCache.find(x => x.id === id); if (!p) return;
+  const history = p.editHistory || [];
+  const el = document.getElementById('history-content');
+  if (!history.length) { el.innerHTML = '<div class="no-data" style="padding:24px;">No edits recorded.</div>'; }
+  else {
+    el.innerHTML = [...history].reverse().map(h => {
+      const changes = [];
+      if (h.before.clockIn !== h.after.clockIn) changes.push(`<div class="audit-change">Clock In: <span>${h.before.clockIn || '—'}</span> → <span style="color:var(--accent)">${h.after.clockIn || '—'}</span></div>`);
+      if (h.before.clockOut !== h.after.clockOut) changes.push(`<div class="audit-change">Clock Out: <span>${h.before.clockOut || '—'}</span> → <span style="color:var(--accent)">${h.after.clockOut || '—'}</span></div>`);
+      if (h.before.task !== h.after.task) changes.push(`<div class="audit-change">Task: <span>${h.before.task}</span> → <span style="color:var(--accent)">${h.after.task}</span></div>`);
+      if (h.before.job !== h.after.job) changes.push(`<div class="audit-change">Job: <span>${h.before.job||'—'}</span> → <span style="color:var(--accent)">${h.after.job||'—'}</span></div>`);
+      if (h.before.notes !== h.after.notes) changes.push(`<div class="audit-change">Notes: <span>${h.before.notes||'—'}</span> → <span style="color:var(--accent)">${h.after.notes||'—'}</span></div>`);
+      const when = new Date(h.editedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      return `<div class="audit-entry">
+        <span class="audit-who">${h.editedBy}</span><span class="audit-when">${when}</span>
+        ${changes.length ? changes.join('') : '<div class="audit-change">No field changes recorded.</div>'}
+      </div>`;
+    }).join('');
+  }
+  openModal('modal-history');
+}
+
 // ─── SIG VIEW ──────────────────────────────────────────────────────────────
 function viewSig(id, which) {
   const p = punchesCache.find(x => x.id === id); if (!p) return;
@@ -718,11 +928,12 @@ function viewSig(id, which) {
 // ─── CSV EXPORT ────────────────────────────────────────────────────────────
 function exportCSV() {
   if (!punchesCache.length) { toast('No data to export'); return; }
-  const rows = [['Employee','Date','Clock In','Clock Out','Duration (hrs)','Task','Job','Notes']];
+  const rows = [['Employee','Date','Clock In','Clock Out','Duration (hrs)','Task','Job','Notes','Edited By']];
   punchesCache.forEach(p => {
     const inDate = p.clockIn?.toDate();
     const outDate = p.clockOut?.toDate();
     const dur = outDate && inDate ? ((outDate - inDate)/3600000).toFixed(2) : '';
+    const lastEdit = p.editHistory?.length ? p.editHistory[p.editHistory.length-1].editedBy : '';
     rows.push([
       p.employeeName,
       inDate ? inDate.toLocaleDateString() : '',
@@ -731,7 +942,8 @@ function exportCSV() {
       dur,
       p.task || '',
       p.job || '',
-      [p.notes, p.notesOut].filter(Boolean).join(' / ')
+      [p.notes, p.notesOut].filter(Boolean).join(' / '),
+      lastEdit
     ]);
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -752,7 +964,6 @@ function openModal(id) {
 }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); if(elapsedInterval&&id==='modal-clockout'){clearInterval(elapsedInterval);} }
 
-// close modal on bg click
 document.querySelectorAll('.modal-bg').forEach(bg => {
   bg.addEventListener('click', e => { if (e.target === bg) closeModal(bg.id); });
 });
@@ -767,7 +978,6 @@ function toast(msg) {
 }
 
 // ─── INIT ──────────────────────────────────────────────────────────────────
-// Set default date range to current week
 function setDefaultDates() {
   const today = new Date();
   const day = today.getDay();
@@ -775,8 +985,6 @@ function setDefaultDates() {
   document.getElementById('filter-from').value = monday.toISOString().slice(0,10);
   document.getElementById('filter-to').value = today.toISOString().slice(0,10);
 }
-setDefaultDates();
-listenEmployees();
 </script>
 </body>
 </html>
