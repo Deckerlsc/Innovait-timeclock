@@ -340,19 +340,35 @@
       <input type="text" id="emp-role-in" placeholder="Welder, Fabricator, Driver…">
     </div>
     <div class="field">
-      <label class="lbl">Email (for login)</label>
-      <input type="email" id="emp-email-in" placeholder="employee@example.com">
-    </div>
-    <div class="field">
-      <label class="lbl">Password</label>
-      <input type="password" id="emp-pass-in" placeholder="Min 6 characters">
-    </div>
-    <div class="field">
       <label class="lbl">Account Type</label>
       <select id="emp-role-type">
         <option value="employee">Employee</option>
         <option value="admin">Admin</option>
       </select>
+    </div>
+    <div class="field">
+      <label class="lbl">Login Setup</label>
+      <select id="emp-login-mode" onchange="toggleLoginMode()">
+        <option value="new">Create new login</option>
+        <option value="link">Link existing account</option>
+      </select>
+    </div>
+    <div id="emp-new-login">
+      <div class="field">
+        <label class="lbl">Email</label>
+        <input type="email" id="emp-email-in" placeholder="employee@example.com">
+      </div>
+      <div class="field">
+        <label class="lbl">Password</label>
+        <input type="password" id="emp-pass-in" placeholder="Min 6 characters">
+      </div>
+    </div>
+    <div id="emp-link-login" style="display:none;">
+      <div class="field">
+        <label class="lbl">Their Email (must already have a login)</label>
+        <input type="email" id="emp-link-email" placeholder="employee@example.com">
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">We'll look up their account by email and link it to this employee record.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-accent" onclick="saveEmployee()">Save</button>
@@ -550,36 +566,59 @@ function openAddEmp() {
   document.getElementById('emp-email-in').value = '';
   document.getElementById('emp-pass-in').value = '';
   document.getElementById('emp-role-type').value = 'employee';
+  document.getElementById('emp-login-mode').value = 'new';
+  document.getElementById('emp-link-email').value = '';
+  toggleLoginMode();
   openModal('modal-emp');
+}
+
+function toggleLoginMode() {
+  const mode = document.getElementById('emp-login-mode').value;
+  document.getElementById('emp-new-login').style.display = mode === 'new' ? '' : 'none';
+  document.getElementById('emp-link-login').style.display = mode === 'link' ? '' : 'none';
 }
 
 async function saveEmployee() {
   const name = document.getElementById('emp-name-in').value.trim();
   const role = document.getElementById('emp-role-in').value.trim();
-  const email = document.getElementById('emp-email-in').value.trim();
-  const pass = document.getElementById('emp-pass-in').value;
   const accountRole = document.getElementById('emp-role-type').value;
+  const mode = document.getElementById('emp-login-mode').value;
   if (!name) { toast('Enter a name'); return; }
-  if (!email) { toast('Enter an email'); return; }
-  if (!pass || pass.length < 6) { toast('Password must be at least 6 characters'); return; }
 
   try {
-    // Create Firebase Auth user via a secondary app instance so we don't lose current session
-    const secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary_' + Date.now());
-    const secondaryAuth = secondaryApp.auth();
-    const cred = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
-    const uid = cred.user.uid;
-    await secondaryApp.delete();
+    if (mode === 'new') {
+      const email = document.getElementById('emp-email-in').value.trim();
+      const pass = document.getElementById('emp-pass-in').value;
+      if (!email) { toast('Enter an email'); return; }
+      if (!pass || pass.length < 6) { toast('Password must be at least 6 characters'); return; }
 
-    // Save employee record
-    await db.collection('employees').add({ name, role, email, accountRole, uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-    // Save user profile
-    await db.collection('users').doc(uid).set({ name, email, role: accountRole });
+      const secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary_' + Date.now());
+      const secondaryAuth = secondaryApp.auth();
+      const cred = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
+      const uid = cred.user.uid;
+      await secondaryApp.delete();
+
+      await db.collection('employees').add({ name, role, email, accountRole, uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      await db.collection('users').doc(uid).set({ name, email, role: accountRole });
+
+    } else {
+      // Link existing account — look up UID by email via users collection
+      const email = document.getElementById('emp-link-email').value.trim();
+      if (!email) { toast('Enter their email'); return; }
+
+      const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+      if (userSnap.empty) { toast('No account found with that email. They need a login first.'); return; }
+
+      const uid = userSnap.docs[0].id;
+      // Update their user profile with new name/role in case it changed
+      await db.collection('users').doc(uid).update({ name, role: accountRole });
+      await db.collection('employees').add({ name, role, email, accountRole, uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
 
     closeModal('modal-emp');
     toast('Employee added');
   } catch (e) {
-    toast(e.message || 'Failed to create account');
+    toast(e.message || 'Failed to save employee');
   }
 }
 
